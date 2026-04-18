@@ -4,62 +4,48 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="AAPL Stock Analysis", layout="wide")
-st.title("📊 Apple (AAPL) Stock Price Analysis Tool")
+st.title("AAPL  Historical Stock Analysis ")
 
-@st.cache_data(show_spinner="正在加载股票数据...")
+@st.cache_data(ttl=3600)
 def load_data():
-    try:
-        data = ak.stock_us_daily(symbol="AAPL", adjust="")
-        data = data[(data["date"] >= "2024-01-01") & (data["date"] <= "2026-04-16")]
-        data = data.set_index("date")
-        data["Daily Return"] = data["close"].pct_change()
-        if not data.empty and len(data) > 1:
-            return data
-        else:
-            st.error("❌ 获取数据为空，请检查网络")
-            return pd.DataFrame()
-    except Exception as e:
-        st.error(f"❌ 数据获取异常: {str(e)}")
-        return pd.DataFrame()
+    data = ak.stock_us_daily(symbol="AAPL", adjust="")
+    data["date"] = pd.to_datetime(data["date"])
+    data["year"] = data["date"].dt.year
+    data["month"] = data["date"].dt.month
+    data["Daily_Return"] = data["close"].pct_change()
+    return data
 
 data = load_data()
 
-if data.empty:
-    st.stop()
+years = sorted(data["year"].unique())
+year = st.selectbox("Select Year", years, index=len(years)-1)
+month = st.slider("Select Month", 1, 12, 4)
 
-st.subheader("📋 最新股票数据")
-st.dataframe(data.tail(10))
+df = data[(data["year"] == year) & (data["month"] == month)]
 
-st.subheader("📈 股价趋势（2024-2026）")
-fig1, ax1 = plt.subplots(figsize=(12,5))
-ax1.plot(data.index, data["close"], label="AAPL 收盘价", color="#1f77b4", linewidth=2)
-ax1.set_title("Apple Stock Price Trend (2024-2026)")
-ax1.set_xlabel("日期")
-ax1.set_ylabel("收盘价 (USD)")
-ax1.legend()
-ax1.grid(alpha=0.3)
-st.pyplot(fig1)
+if df.empty:
+    st.warning(f"No data available for {year}-{month:02d}")
+else:
+    st.subheader(f"Stock Price Trend: {year}-{month:02d}")
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 7))
 
-st.subheader("📊 日收益率分布")
-fig2, ax2 = plt.subplots(figsize=(12,3))
-ax2.hist(data["Daily Return"].dropna(), bins=50, color="#ff7f0e", alpha=0.7, edgecolor="black")
-ax2.set_title("Daily Return Distribution")
-ax2.set_xlabel("日收益率")
-ax2.set_ylabel("频次")
-ax2.grid(alpha=0.3)
-st.pyplot(fig2)
+    ax1.plot(df["date"], df["close"], color="#0072b2", linewidth=2)
+    ax1.set_title("AAPL Closing Price Trend")
+    ax1.set_xlabel("Date")
+    ax1.set_ylabel("Closing Price (USD)")
+    ax1.grid(alpha=0.3)
 
-st.subheader("📌 核心指标")
-latest_close = round(data["close"].iloc[-1], 2)
-avg_daily_return = round(data["Daily Return"].mean(), 4)
-volatility = round(data["Daily Return"].std(), 4)
+    ret = df["Daily_Return"].dropna()
+    ax2.hist(ret, bins=25, alpha=0.7, color="#cc79a7")
+    ax2.set_title("Daily Return Distribution")
+    ax2.set_xlabel("Daily Return")
+    ax2.set_ylabel("Frequency")
+    ax2.grid(alpha=0.3)
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric(label="最新收盘价", value=f"{latest_close} USD")
-with col2:
-    st.metric(label="平均日收益率", value=f"{avg_daily_return}")
-with col3:
-    st.metric(label="日波动率", value=f"{volatility}")
+    plt.tight_layout()
+    st.pyplot(fig)
 
-st.info("💡 提示：波动率越高，代表股票价格波动越大，投资风险越高。")
+    st.subheader("Stock Analysis Metrics")
+    st.write(f"**Latest Closing Price**: ${df['close'].iloc[-1]:.2f}")
+    st.write(f"**Average Daily Return**: {ret.mean():.6f}")
+    st.write(f"**Volatility (Std Dev)**: {ret.std():.6f}")
